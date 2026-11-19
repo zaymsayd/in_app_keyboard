@@ -7,7 +7,7 @@ part of 'keyboard_controller.dart';
 // **************************************************************************
 
 String _$keyboardControllerHash() =>
-    r'10352f97e16d2ca63f3de6254835464725d85f19';
+    r'64f657ec867f743969d56a1e567653bdb196371a';
 
 /// See also [KeyboardController].
 @ProviderFor(KeyboardController)

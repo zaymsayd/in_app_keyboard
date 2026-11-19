@@ -1,6 +1,17 @@
 # in_app_keyboard
 
+[![pub package](https://img.shields.io/pub/v/in_app_keyboard.svg)](https://pub.dev/packages/in_app_keyboard)
+[![pub points](https://img.shields.io/pub/points/in_app_keyboard)](https://pub.dev/packages/in_app_keyboard/score)
+[![popularity](https://img.shields.io/pub/popularity/in_app_keyboard)](https://pub.dev/packages/in_app_keyboard/score)
+[![likes](https://img.shields.io/pub/likes/in_app_keyboard)](https://pub.dev/packages/in_app_keyboard/score)
+
 A Flutter package for replacing the system keyboard with a fully custom in-app keyboard — built for tablets, POS terminals, and any app where the native keyboard gets in the way.
+
+## Platform Support
+
+| Android | iOS |
+|:-------:|:---:|
+| ✅      | ✅  |
 
 ---
 
@@ -43,13 +54,6 @@ It's not a virtual keyboard that wraps `TextField` with extra logic — every `I
 
 ---
 
-## Screenshots
-
-<!-- Add screenshots or a GIF here -->
-<!-- Suggested: phone bottom-docked mode, tablet floating mode, Arabic layout -->
-
----
-
 ## Getting Started
 
 Add the package to your `pubspec.yaml`:
@@ -59,7 +63,7 @@ dependencies:
   in_app_keyboard: ^0.0.1
 ```
 
-Since this package uses Riverpod code generation, you'll also need to run the build runner once after adding the dependency:
+Since this package uses Riverpod code generation, run the build runner once after adding the dependency:
 
 ```bash
 flutter pub get
@@ -86,6 +90,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorObservers: [InAppKeyboardObserver()],
       builder: (context, child) {
         return KeyboardOverlay(child: child!);
       },
@@ -96,6 +101,19 @@ class MyApp extends StatelessWidget {
 ```
 
 `KeyboardOverlay` must sit above your entire widget tree. Placing it in the `MaterialApp` builder is the right spot — it gives the overlay access to the full screen, including areas that would otherwise be obscured by the system keyboard.
+
+> **Important:** Since this is a custom overlay keyboard, set `resizeToAvoidBottomInset: false` on your `Scaffold` widgets. This prevents Flutter from trying to resize the layout for a system keyboard that never appears.
+
+```dart
+Scaffold(
+  resizeToAvoidBottomInset: false,
+  body: ...
+)
+```
+
+### Automatic Scrolling
+
+On small screens where the keyboard docks at the bottom, `KeyboardOverlay` automatically adds `AnimatedPadding` to push your content up. `InAppTextField` also automatically triggers `Scrollable.ensureVisible` after the keyboard appears to ensure the focused field is never covered. For the best experience, wrap your scrollable content in a `SingleChildScrollView`.
 
 ---
 
@@ -189,10 +207,9 @@ The floating keyboard is a 460×260px panel with a drag handle at the top. You c
 
 The drag handle bar shows the current keyboard type label on the left and a close button on the right. Tapping the close button hides the keyboard without removing focus.
 
-If you need to force floating mode programmatically (e.g. you're building a tablet-specific layout but your test device is below the threshold):
+If you need to force floating mode programmatically:
 
 ```dart
-// Read the controller and toggle manually
 final controller = ref.read(keyboardControllerProvider.notifier);
 controller.toggleFloating(true);
 ```
@@ -215,7 +232,7 @@ KeyboardOverlay(
 ```dart
 InAppTextField(
   keyboardType: KeyboardType.text,
-  layout: LayoutVariant.arabic,  // show Arabic layout regardless of type
+  layout: LayoutVariant.arabic,
 )
 ```
 
@@ -239,6 +256,50 @@ class MyWidget extends ConsumerWidget {
 `keyboardControllerProvider` exposes the full `KeyboardState` — current visibility, active layout, shift state, floating position, and the active `TextEditingController`.
 
 **Long-press alternates** are defined per key in the layout via `KeyModel.alternates`. For example, the `.` key on the email layout includes `['.com', '.org', '.net', '.edu']` by default. Custom layouts can define any alternates on any key.
+
+---
+
+## Navigation & Auto-Dismiss
+
+The keyboard hides automatically when the user navigates between routes. Three options — pick one.
+
+**Option 1 — `InAppKeyboardObserver` (recommended)**
+
+Works with standard `Navigator`, GoRouter, GetX, AutoRoute, and any router that calls the Flutter navigator under the hood.
+
+```dart
+MaterialApp(
+  navigatorObservers: [InAppKeyboardObserver()],
+  ...
+)
+```
+
+Hides the keyboard on every push, pop, replace, or remove. No per-screen setup required.
+
+**Option 2 — `keyboardRouteObserver` + `InAppKeyboardRouteAware` mixin**
+
+For fine-grained control per screen. Register the observer globally:
+
+```dart
+MaterialApp(
+  navigatorObservers: [keyboardRouteObserver],
+  ...
+)
+```
+
+Then use the mixin on any screen state that should auto-hide the keyboard:
+
+```dart
+class _MyScreenState extends State<MyScreen> with RouteAware, InAppKeyboardRouteAware {
+  // Mixin handles subscribe/unsubscribe and hide automatically.
+}
+```
+
+**Option 3 — Manual**
+
+```dart
+ref.read(keyboardControllerProvider.notifier).hide();
+```
 
 ---
 
@@ -278,4 +339,4 @@ The Riverpod provider uses `keepAlive: true`, meaning the keyboard state survive
 
 ## License
 
-See [LICENSE](LICENSE) for details.
+MIT. See [LICENSE](LICENSE) for details.

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'keyboard_action_type.dart';
 import 'keyboard_config.dart';
 
 enum ShiftState { off, on, capsLock }
@@ -9,10 +10,12 @@ class KeyboardState {
   final LayoutVariant currentLayout;
   final ShiftState shiftState;
   final DateTime? lastShiftTap;
-  final Offset? position; 
+  final Offset? position;
   final bool isFloating;
+  final bool isImmediate;
   final double width;
   final TextEditingController? activeController;
+  final KeyboardActionType actionType;
 
   const KeyboardState({
     this.isVisible = false,
@@ -22,8 +25,10 @@ class KeyboardState {
     this.lastShiftTap,
     this.position,
     this.isFloating = false,
+    this.isImmediate = false,
     this.width = double.infinity,
     this.activeController,
+    this.actionType = KeyboardActionType.done,
   });
 
   KeyboardState copyWith({
@@ -34,8 +39,10 @@ class KeyboardState {
     DateTime? lastShiftTap,
     Offset? position,
     bool? isFloating,
+    bool? isImmediate,
     double? width,
     TextEditingController? activeController,
+    KeyboardActionType? actionType,
   }) {
     return KeyboardState(
       isVisible: isVisible ?? this.isVisible,
@@ -45,8 +52,10 @@ class KeyboardState {
       lastShiftTap: lastShiftTap ?? this.lastShiftTap,
       position: position ?? this.position,
       isFloating: isFloating ?? this.isFloating,
+      isImmediate: isImmediate ?? this.isImmediate,
       width: width ?? this.width,
       activeController: activeController ?? this.activeController,
+      actionType: actionType ?? this.actionType,
     );
   }
 

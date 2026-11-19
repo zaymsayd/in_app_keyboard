@@ -1,28 +1,44 @@
 import 'package:flutter/material.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
+import '../models/keyboard_action_type.dart';
 import '../models/keyboard_config.dart';
 import '../models/keyboard_state.dart';
 import '../models/key_model.dart';
 import '../services/input_handler_service.dart';
+import '../services/keyboard_overlay_service.dart';
 
 part 'keyboard_controller.g.dart';
 
 @Riverpod(keepAlive: true)
 class KeyboardController extends _$KeyboardController {
   /// Stored outside immutable state so it never triggers unnecessary rebuilds.
-  VoidCallback? _onSubmitted;
+  VoidCallback? _onAction;
 
   @override
-  KeyboardState build() => const KeyboardState();
+  KeyboardState build() {
+    // Listen to global dismissal requests (e.g., from NavigatorObserver)
+    KeyboardOverlayService.instance.dismissalNotifier.addListener(_onGlobalDismissal);
+    
+    ref.onDispose(() {
+      KeyboardOverlayService.instance.dismissalNotifier.removeListener(_onGlobalDismissal);
+    });
+
+    return const KeyboardState();
+  }
+
+  void _onGlobalDismissal() {
+    Future.microtask(() => clearActiveField(immediate: true));
+  }
 
   void registerField(
     TextEditingController controller, {
     KeyboardType? type,
     LayoutVariant? layout,
     bool isFloating = false,
-    VoidCallback? onSubmitted,
+    KeyboardActionType actionType = KeyboardActionType.done,
+    VoidCallback? onAction,
   }) {
-    _onSubmitted = onSubmitted;
+    _onAction = onAction;
     final effectiveType = type ?? state.currentType;
     final config = KeyboardConfig.fromType(effectiveType);
 
@@ -32,19 +48,31 @@ class KeyboardController extends _$KeyboardController {
       currentLayout: layout ?? config.defaultLayout,
       isVisible: true,
       isFloating: isFloating,
+      isImmediate: false, // Reset on new registration
+      actionType: actionType,
     );
   }
 
   void unregisterField(TextEditingController controller) {
     if (state.activeController == controller) {
-      _onSubmitted = null;
-      state = state.copyWith(isVisible: false, activeController: null);
+      _onAction = null;
+      state = state.copyWith(isVisible: false, activeController: null, isImmediate: false);
     }
   }
 
-  void hide() {
-    _onSubmitted = null;
-    state = state.copyWith(isVisible: false);
+  void hide({bool immediate = false}) {
+    _onAction = null;
+    state = state.copyWith(isVisible: false, isImmediate: immediate);
+  }
+
+  /// Clears the active field and hides the keyboard. Useful during navigation.
+  void clearActiveField({bool immediate = true}) {
+    _onAction = null;
+    state = state.copyWith(
+      isVisible: false,
+      activeController: null,
+      isImmediate: immediate,
+    );
   }
 
   void onKeyTap(KeyModel key) {
@@ -72,11 +100,15 @@ class KeyboardController extends _$KeyboardController {
         InputHandlerService.insertText(controller, ' ');
 
       case KeyAction.enter:
-        if (_onSubmitted != null) {
-          _onSubmitted!();
-          hide();
-        } else {
+        final actionType = state.actionType;
+        if (actionType == KeyboardActionType.newline) {
           InputHandlerService.insertText(controller, '\n');
+        } else {
+          _onAction?.call();
+          if (actionType != KeyboardActionType.next &&
+              actionType != KeyboardActionType.previous) {
+            hide();
+          }
         }
 
       case KeyAction.shift:

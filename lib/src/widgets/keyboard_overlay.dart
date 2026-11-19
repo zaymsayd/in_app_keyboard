@@ -33,6 +33,22 @@ class KeyboardOverlay extends ConsumerWidget {
     final isFloating = ref.watch(
       keyboardControllerProvider.select((s) => s.isFloating),
     );
+    final isImmediate = ref.watch(
+      keyboardControllerProvider.select((s) => s.isImmediate),
+    );
+
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isSmallScreen = screenWidth <= 600;
+
+    // We no longer update height here with a hardcoded value.
+    // Instead, _BottomKeyboard will report its actual height.
+    if (!isVisible || isFloating || !isSmallScreen) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (KeyboardOverlayService.instance.keyboardHeight.value != 0) {
+          KeyboardOverlayService.instance.keyboardHeight.value = 0;
+        }
+      });
+    }
 
     return PopScope(
       canPop: !isVisible,
@@ -44,24 +60,57 @@ class KeyboardOverlay extends ConsumerWidget {
       child: Stack(
         children: [
           // ── Main content ──────────────────────────────────────────────────
-          // In bottom-dock mode, wrap with a dismiss gesture. In floating mode
-          // the content remains fully interactive — the user closes the
-          // keyboard via the ✕ button in the drag handle.
-          if (dismissOnOutsideTap && isVisible && !isFloating)
-            GestureDetector(
-              onTap: () {
-                ref.read(keyboardControllerProvider.notifier).hide();
-                FocusScope.of(context).unfocus();
-                KeyboardOverlayService.instance.removePopup();
-              },
-              behavior: HitTestBehavior.translucent,
-              child: child,
-            )
-          else
-            child,
+          // AnimatedPadding shifts the content up when the keyboard appears on small screens.
+          ValueListenableBuilder<double>(
+            valueListenable: KeyboardOverlayService.instance.keyboardHeight,
+            builder: (context, height, childWidget) {
+              return AnimatedPadding(
+                padding: EdgeInsets.only(bottom: height),
+                duration: const Duration(milliseconds: 280),
+                curve: Curves.easeOutCubic,
+                child: childWidget!,
+              );
+            },
+            child: (dismissOnOutsideTap && isVisible && !isFloating)
+                ? GestureDetector(
+                    onTap: () {
+                      ref.read(keyboardControllerProvider.notifier).hide();
+                      FocusScope.of(context).unfocus();
+                      KeyboardOverlayService.instance.removePopup();
+                    },
+                    behavior: HitTestBehavior.translucent,
+                    child: child,
+                  )
+                : child,
+          ),
 
           // ── Bottom-docked keyboard ────────────────────────────────────────
-          if (isVisible && !isFloating) const _BottomKeyboard(),
+          if (!isFloating)
+            Positioned(
+              bottom: 0,
+              left: 0,
+              right: 0,
+              child: AnimatedSwitcher(
+                duration: isImmediate 
+                    ? Duration.zero 
+                    : const Duration(milliseconds: 280),
+                switchInCurve: Curves.easeOutCubic,
+                switchOutCurve: Curves.easeInCubic,
+                transitionBuilder: (child, animation) {
+                  if (isImmediate) return child;
+
+                  final offsetAnimation = Tween<Offset>(
+                    begin: const Offset(0, 1),
+                    end: Offset.zero,
+                  ).animate(animation);
+                  return SlideTransition(
+                    position: offsetAnimation,
+                    child: child,
+                  );
+                },
+                child: isVisible ? const _BottomKeyboard() : const SizedBox.shrink(),
+              ),
+            ),
 
           // ── Floating keyboard ─────────────────────────────────────────────
           if (isVisible && isFloating) const _FloatingKeyboard(),
@@ -78,30 +127,41 @@ class KeyboardOverlay extends ConsumerWidget {
 class _BottomKeyboard extends StatelessWidget {
   const _BottomKeyboard();
 
+  void _reportHeight(BuildContext context) {
+    final box = context.findRenderObject() as RenderBox?;
+    if (box != null && box.hasSize) {
+      final height = box.size.height;
+      if (KeyboardOverlayService.instance.keyboardHeight.value != height) {
+        // Use post-frame to avoid build-phase state updates
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          KeyboardOverlayService.instance.keyboardHeight.value = height;
+        });
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Positioned(
-      bottom: 0,
-      left: 0,
-      right: 0,
-      child: SafeArea(
-        top: false,
-        bottom: true,
-        child: GestureDetector(
-          onTap: () {}, // prevent tap bubbling to dismiss layer
-          child: Material(
-            elevation: 8,
-            color: const Color(0xFFD1D5DB),
-            child: Builder(
-              builder: (ctx) {
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  KeyboardOverlayService.instance.initialize(
-                    Overlay.maybeOf(ctx, rootOverlay: true),
-                  );
-                });
-                return const KeyboardWidget();
-              },
-            ),
+    return SafeArea(
+      top: false,
+      bottom: true,
+      child: GestureDetector(
+        onTap: () {}, // prevent tap bubbling to dismiss layer
+        child: Material(
+          elevation: 8,
+          color: const Color(0xFFD1D5DB),
+          child: Builder(
+            builder: (ctx) {
+              // Measure after each layout to catch height changes (e.g. QWERTY to numeric)
+              WidgetsBinding.instance.addPostFrameCallback((_) => _reportHeight(ctx));
+
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                KeyboardOverlayService.instance.initialize(
+                  Overlay.maybeOf(ctx, rootOverlay: true),
+                );
+              });
+              return const KeyboardWidget();
+            },
           ),
         ),
       ),

@@ -1,13 +1,23 @@
 import 'package:flutter/material.dart';
 
+/// Internal notifier to bridge navigation events and the keyboard controller.
+class KeyboardDismissalNotifier extends ChangeNotifier {
+  void notify() => notifyListeners();
+}
+
 /// A global service to manage keyboard-related overlays (like key extensions)
-/// without relying on specific widget contexts.
 class KeyboardOverlayService {
   static final KeyboardOverlayService instance = KeyboardOverlayService._internal();
   KeyboardOverlayService._internal();
 
   OverlayState? _overlayState;
   OverlayEntry? _currentEntry;
+
+  /// Notifies listeners of the current keyboard height for UI adjustments.
+  final ValueNotifier<double> keyboardHeight = ValueNotifier<double>(0);
+
+  /// A private notifier used to trigger dismissal from global navigation events.
+  final KeyboardDismissalNotifier dismissalNotifier = KeyboardDismissalNotifier();
 
   /// Initialize the service with the root overlay state.
   /// Should be called from a widget that has access to the [Overlay].
